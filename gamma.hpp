@@ -2,6 +2,8 @@
 #include <cmath>
 #include <stdexcept>
 
+#include <iostream>
+
 
 //Allan Macleod, Algorithm AS 245,
 double a_lgamma ( double xvalue){
@@ -149,10 +151,11 @@ double gamma_inc (double p,  double x){
 
   arg = p * std::log (x) - x - g;
 
-  if ( arg < std::log ( uflo ) ){
-    throw std::runtime_error("arg < std::log ( uflo )");
-    // return -999999999.0; //error
-  }
+  // if ( arg < std::log ( uflo ) ){
+  //   std::cout << arg << "  " << std::log ( uflo ) << "\n";
+  //   throw std::runtime_error("arg < std::log ( uflo )");
+  //   // return -999999999.0; //error
+  // }
   factor = std::exp(arg);
   if ( x <= 1.0 || x < p ){
     gin = 1.0;

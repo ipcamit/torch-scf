@@ -1,7 +1,8 @@
 // C++ version of one and two electron integrals
 // McMurchie-Davidson recursion
 
-#include <pybind11/detail/common.h>
+// #include <pybind11/detail/common.h>
+#include <cstring>
 #define _USE_MATH_DEFINES
 
 #include <iostream>
@@ -37,6 +38,7 @@ double factorial2(double n){
 }
 
 double boys(double n, double x){
+    x += 1e-10;
     return std::exp(a_lgamma(n+0.5)) * gamma_inc(0.5 + n, x) / std::pow(2.0*x, n+0.5);
 }
 
@@ -80,9 +82,9 @@ void BasisFunctionSTO3G::normalize(){
         const int n = shell[2];
         int L = l+m+n;
         double lmn_pow = std::pow(2,2*(l+m+n)+1.5);
-        double fact2_1 = factorial2(static_cast<double>(2*l-1));
-        double fact2_2 = factorial2(static_cast<double>(2*m-1));
-        double fact2_3 = factorial2(static_cast<double>(2*n-1)); 
+        double fact2_1 = factorial2(static_cast<double>(l == 0 ? 0: 2*l-1));
+        double fact2_2 = factorial2(static_cast<double>(m == 0 ? 0: 2*m-1));
+        double fact2_3 = factorial2(static_cast<double>(n == 0 ? 0: 2*n-1)); 
         double M_PI_1_5 = std::pow(M_PI,1.5);
 
         norm[0] = lmn_pow * std::pow(exps[0],L+1.5)/fact2_1/fact2_2/fact2_3/M_PI_1_5;
@@ -399,6 +401,7 @@ double scf_energy(int n_basis, double * P_mat, double * S_mat, double * T_mat, d
             for (int x = 0; x < n_basis; x++){
                 for (int y = 0; y < n_basis; y++){
                     G[i*n_basis+j] += P_mat[x*n_basis+y]*(G_mat[i*N3+j*N2+y*n_basis+x] - 0.5*G_mat[i*N3+x*N2+y*n_basis+j]);
+                    // std::cout << i << " " << j << " " <<  (G_mat[i*N3+j*N2+y*n_basis+x] - 0.5*G_mat[i*N3+x*N2+y*n_basis+j]) << " x " << P_mat[x*n_basis+y] << " = " << P_mat[x*n_basis+y]*(G_mat[i*N3+j*N2+y*n_basis+x] - 0.5*G_mat[i*N3+x*N2+y*n_basis+j]) << std::endl;
                 }
             }
         }
@@ -407,6 +410,7 @@ double scf_energy(int n_basis, double * P_mat, double * S_mat, double * T_mat, d
     double energy = 0.0;
     for (int i = 0; i < n_basis; i++){
         for (int j = 0; j < n_basis; j++){
+            // std::cout << i << " " << j << " " << P_mat[i*n_basis+j] << " " << T_mat[i*n_basis+j] << " " << V_mat[i*n_basis+j] << " " << G[i*n_basis+j] << std::endl;
             energy += P_mat[i*n_basis+j]*(2*(T_mat[i*n_basis+j] + V_mat[i*n_basis+j]) + G[i*n_basis+j]);
         }
     }
@@ -423,8 +427,13 @@ double scf_step(int n_atoms, int n_basis_per_atom, double *C, double * species, 
     double * G_mat = new double[n_basis*n_basis*n_basis*n_basis];
     double * P_mat = new double[n_basis*n_basis];
 
+    std::cout << "Getting one electron integrals\n";
     get_one_electron_integrals(n_basis, list_of_basis, coords, S_mat, T_mat, V_mat);
+    std::cout << "Getting two electron integrals\n";
     get_two_electron_integrals(n_basis, list_of_basis, G_mat);
+    std::cout << "Getting density matrix\n";
+    P(n_basis, C, P_mat);
+    std::cout << "Energy\n";
     double energy = scf_energy(n_basis, P_mat, S_mat, T_mat, V_mat, G_mat);
 
     delete [] S_mat;
@@ -443,10 +452,16 @@ void scf_step(int n_atoms, int n_basis_per_atom, double *C, double * species, do
     double * G_mat = new double[n_basis*n_basis*n_basis*n_basis];
     double * P_mat = new double[n_basis*n_basis];
 
+    std::cout << "Getting one electron integrals\n";
     get_one_electron_integrals(n_basis, list_of_basis, coords, S_mat, T_mat, V_mat);
+
+    std::cout << "Getting two electron integrals\n";
     get_two_electron_integrals(n_basis, list_of_basis, G_mat);
+    std::cout << "Getting density matrix\n";
+    P(n_basis, C, P_mat);
     double energy_ = scf_energy(n_basis, P_mat, S_mat, T_mat, V_mat, G_mat);
 
+    std::cout << energy_ << "\n";
     delete [] S_mat;
     delete [] T_mat;
     delete [] V_mat;
@@ -557,7 +572,8 @@ BasisFunctionSTO3G * get_list_of_basis(int n_atoms, double * coords){
 }
 
 // double scf_step(int n_atoms, int n_basis_per_atom, double *C, double * species, double* coords, BasisFunctionSTO3G *list_of_basis)
-double __enzyme_autodiff(void (*) (int, int, double *, double *, double *, BasisFunctionSTO3G *, double *),
+
+void __enzyme_autodiff(void (*) (int, int, double *, double *, double *, BasisFunctionSTO3G *, double *),
                         int, int,
                         int, int,
                         int, double *, double *,
@@ -568,7 +584,8 @@ double __enzyme_autodiff(void (*) (int, int, double *, double *, double *, Basis
 
 void grad_scf_step(int n_atoms, int n_basis_per_atom, double *C,double *dC, double * species, double* coords, double * d_coords, BasisFunctionSTO3G *list_of_basis, double * energy, double * d_energy){
     __enzyme_autodiff(scf_step, 
-                    enzyme_const, n_atoms, enzyme_const, n_atoms, 
+                    enzyme_const, n_atoms, 
+                    enzyme_const, n_basis_per_atom, 
                     enzyme_dup, C, dC, 
                     enzyme_const, species, 
                     enzyme_dup, coords, d_coords, 
@@ -579,7 +596,7 @@ void grad_scf_step(int n_atoms, int n_basis_per_atom, double *C,double *dC, doub
 namespace py = pybind11;
 
 PYBIND11_MODULE(scf, m){
-    m.def("scf_step", [](int n_atoms, py::array_t<double> C, py::array_t<double> species, py::array_t<double> coords){
+    m.def("scf_step", [](int n_atoms, py::array_t<double> & C, py::array_t<double>& species, py::array_t<double>& coords){
         auto C_buf = C.request();
         auto species_buf = species.request();
         auto coords_buf = coords.request();
@@ -591,14 +608,42 @@ PYBIND11_MODULE(scf, m){
 
         return scf_step(n_atoms, n_basis_per_atom, C_ptr, species_ptr, coords_ptr, list_of_basis);
     });
-    m.def("scf_step_with_grad", [](py::array_t<double> C, py::array_t<double> coords, double dE_dloss=1.0){
-        int n_atoms = coords.shape(0);
+
+    m.def("scf_step_with_grad", [](int n_atoms, py::array_t<double>& C, py::array_t<double>& species, py::array_t<double>& coords, double dE_dloss=1.0){
         auto C_buf = C.request();
-        auto species = py::array_t<double>(n_atoms);
-        // set species to 14
-        for (int i = 0; i < n_atoms; i++){
-            species.mutable_at(i) = 14.0;
-        }
+        auto species_buf = species.request();
+        auto coords_buf = coords.request();
+        int n_basis_per_atom = 9;
+
+        auto C_ptr = static_cast<double *>(C_buf.ptr);
+        auto species_ptr = static_cast<double *>(species_buf.ptr);
+        auto coords_ptr = static_cast<double *>(coords_buf.ptr);
+        auto list_of_basis = get_list_of_basis(n_atoms,coords_ptr);
+
+        auto dC_ptr = new double[n_atoms*n_basis_per_atom];
+        auto d_coords_ptr = new double[n_atoms*3];
+        double energy = 0.0;
+        std::memset(dC_ptr, 0, sizeof(double)*n_atoms*n_basis_per_atom);
+        std::memset(d_coords_ptr, 0, sizeof(double)*n_atoms*3);
+        grad_scf_step(n_atoms, n_basis_per_atom, 
+                        C_ptr, dC_ptr, species_ptr, 
+                        coords_ptr, d_coords_ptr, 
+                        list_of_basis, &energy, &dE_dloss);
+        // return energy, dC and d_coords, and transfer ownership of the memory to python
+        py::array_t<double> dC = py::array_t<double>({n_atoms, n_basis_per_atom}, dC_ptr);
+        py::array_t<double> d_coords = py::array_t<double>({n_atoms, 3}, d_coords_ptr);
+        return std::make_tuple(energy, dC, d_coords);
+    }, 
+    py::return_value_policy::take_ownership,
+    py::arg("n_atoms"),
+    py::arg("C"),
+    py::arg("species"),
+    py::arg("coords"),
+    py::arg("dE_dloss")=1.0,
+    "Compute the energy and gradient of the energy with respect to the parameters");
+
+    m.def("get_1e_int",[](int n_atoms, py::array_t<double> & C, py::array_t<double>& species, py::array_t<double>& coords){
+        auto C_buf = C.request();
         auto species_buf = species.request();
         auto coords_buf = coords.request();
         int n_basis_per_atom = 9;
@@ -606,19 +651,46 @@ PYBIND11_MODULE(scf, m){
         double *species_ptr = (double *) species_buf.ptr;
         double *coords_ptr = (double *) coords_buf.ptr;
         auto list_of_basis = get_list_of_basis(n_atoms,coords_ptr);
-        double *dC_ptr = (double *) malloc(sizeof(double)*n_atoms*n_basis_per_atom);
-        double *d_coords_ptr = (double *) malloc(sizeof(double)*n_atoms*3);
-        double energy = 0.0;
+        int n_basis = n_basis_per_atom * n_atoms;
 
-        grad_scf_step(n_atoms, n_basis_per_atom, C_ptr, dC_ptr, species_ptr, coords_ptr, d_coords_ptr, list_of_basis, &energy, &dE_dloss);
-        // return energy, dC and d_coords, and transfer ownership of the memory to python
-        py::array_t<double> dC = py::array_t<double>({n_atoms, n_basis_per_atom}, dC_ptr);
-        py::array_t<double> d_coords = py::array_t<double>({n_atoms, 3}, d_coords_ptr);
-        return std::make_tuple(dC, d_coords, energy);
-    }, 
+        double * S_mat = new double[n_basis*n_basis];
+        double * T_mat = new double[n_basis*n_basis];
+        double * V_mat = new double[n_basis*n_basis];
+        get_one_electron_integrals(n_basis, list_of_basis, coords_ptr, S_mat, T_mat, V_mat);
+        
+        py::array_t<double> S = py::array_t<double>({n_basis, n_basis},S_mat);
+        py::array_t<double> V = py::array_t<double>({n_basis, n_basis},V_mat);
+        py::array_t<double> T = py::array_t<double>({n_basis, n_basis},T_mat);
+        // std::cout << "->S: " << S << std::endl;
+        // std::cout << "->V: " << V << std::endl;
+        // std::cout << "->T: " << T << std::endl;
+        return py::make_tuple(S, V, T);
+    },
     py::return_value_policy::take_ownership,
+    py::arg("n_atoms"),
     py::arg("C"),
+    py::arg("species"),
     py::arg("coords"),
-    py::arg("dE_dloss")=1.0,
-    "Compute the energy and gradient of the energy with respect to the parameters");
+    "Get all 1e integrals"
+    );
+
+    m.def("get_2e_int",[](int n_atoms, py::array_t<double> & C, py::array_t<double>& species, py::array_t<double>& coords){
+        auto C_buf = C.request();
+        auto species_buf = species.request();
+        auto coords_buf = coords.request();
+        int n_basis_per_atom = 9;
+        double *C_ptr = (double *) C_buf.ptr;
+        double *species_ptr = (double *) species_buf.ptr;
+        double *coords_ptr = (double *) coords_buf.ptr;
+        auto list_of_basis = get_list_of_basis(n_atoms,coords_ptr);
+        int n_basis = n_basis_per_atom * n_atoms;
+
+        double * G_mat = new double[n_basis*n_basis*n_basis*n_basis];
+        get_two_electron_integrals(n_basis, list_of_basis, G_mat);
+        
+        py::array_t<double> G = py::array_t<double>({n_basis, n_basis, n_basis, n_basis},G_mat);
+        // std::cout << "->G: " << G << std::endl;
+        return G;
+    },
+    py::return_value_policy::take_ownership);
 }

@@ -7,6 +7,8 @@ if (NOT DEFINED Enzyme_DIR)
     set(Enzyme_DIR /opt/enzyme/enzyme/build/Enzyme)
 endif()
 
+set(CMAKE_BUILD_TYPE Release)
+
 string(REGEX MATCH "^[0-9]+" LLVM_MAJOR_VERSION ${CMAKE_CXX_COMPILER_VERSION})
 
 find_package(pybind11 REQUIRED)
